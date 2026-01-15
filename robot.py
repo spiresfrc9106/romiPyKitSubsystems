@@ -252,6 +252,10 @@ class MyRobot(commands2.TimedCommandRobot):
 
         log("driveForwardCmd", forward, "ratio")
         log("driveRotationCmd", rotation, "ratio")
+        log( "leftOutputPWM", self.leftMotor.get(), "ratio")
+        log( "leftOutputVolts", self.leftMotor.getVoltage(), "V")
+        log( "rightOutputPWM", self.rightMotor.get(), "ratio")
+        log( "rightOutputVolts", self.rightMotor.getVoltage(), "V")
 
     def testInit(self) -> None:
         pass
