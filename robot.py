@@ -47,9 +47,15 @@
 import os
 import typing
 from math import pi
+from dataclasses import dataclass, field
 
 import romi
 import wpilib
+from wpilib import (
+    Encoder,
+    RobotBase,
+    Spark,
+)
 from wpilib.drive import DifferentialDrive
 from wpimath.estimator import DifferentialDrivePoseEstimator
 from wpimath.geometry import (
@@ -61,6 +67,9 @@ from wpimath.kinematics import (
     DifferentialDriveKinematics,
     DifferentialDriveWheelSpeeds,
 )
+from wpilib.simulation import DifferentialDrivetrainSim
+from wpimath.system.plant import DCMotor
+
 from commands2 import (
     Command,
     TimedCommandRobot,
@@ -68,6 +77,11 @@ from commands2 import (
 from pykit.wpilog.wpilogwriter import WPILOGWriter
 from pykit.wpilog.wpilogreader import WPILOGReader
 from pykit.networktables.nt4Publisher import NT4Publisher
+from pykit.autolog import (
+    autolog,
+    autolog_output,
+    autologgable_output,
+)
 from pykit.loggedrobot import LoggedRobot
 from pykit.logger import Logger
 
@@ -76,10 +90,11 @@ from commands2 import CommandScheduler, Command, cmd
 
 from commands2.button import Trigger
 
-
+import constants
 from utils.signalLogging import SignalWrangler
 from utils.signalLogging import log
 from utils.helpfulmath import deadband
+from utils.helpfulmath import clamp
 
 # Uncomment these lines and set the port to the pycharm debugger to use the
 # Pycharm debug server to debug this code.
@@ -118,16 +133,15 @@ class AutoDriveForward1Sec():
                 case 'start':
                     self.entered_state_time = wpilib.Timer.getFPGATimestamp()
                     self.state = 'drive'
-                    speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
+                    self.robot.setForwardAndRotationCommands(0.0, 0.0)
                 case 'drive':
                     if now-self.entered_state_time>1.0:
                         self.state = 'stop'
-                        speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
+                        self.robot.setForwardAndRotationCommands(0.0, 0.0)
                     else:
-                        speeds = DifferentialDrive.arcadeDriveIK(0.5, 0, False)
+                        self.robot.setForwardAndRotationCommands(0.5, 0.0)
                 case 'stop' | _:
-                    speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
-            self.robot.setMotorSpeeds(speeds)
+                    self.robot.setForwardAndRotationCommands(0.0, 0.0)
 
             log("autostate", self.state_to_int(), "int")
 
@@ -140,7 +154,7 @@ class AutoDriveForward1Sec():
             result = self.states[self.state]
         return result
 
-
+@autologgable_output
 class MyRobot(LoggedRobot):
     """
     Command v2 robots are encouraged to inherit from TimedCommandRobot, which
@@ -162,7 +176,51 @@ class MyRobot(LoggedRobot):
     kWheelDiameterInch = 2.75591
     kWheelRadiusM = (kWheelDiameterInch / 2.0) * kMetersPerInch
     kTrackWidthM = 5.5 * kMetersPerInch
+    kMotorReduction = 10.71
+    kGearbox = DCMotor.CIM(2)
 
+    def __init__(self) -> None:
+        super().__init__()
+        Logger.recordMetadata("Robot", "Romi")
+
+        print(f"isRealRomiMode()={constants.isRealRomiMode()} RobotBase.isReal()={RobotBase.isReal()} constants.kRobotMode={constants.kRobotMode}")
+
+        match constants.kRobotMode:
+            case constants.RobotModes.REAL|constants.RobotModes.SIMULATION:
+                deploy_config = wpilib.deployinfo.getDeployData()
+                if deploy_config is not None:
+                    Logger.recordMetadata(
+                        "Deploy Host", deploy_config.get("deploy-host", "")
+                    )
+                    Logger.recordMetadata(
+                        "Deploy User", deploy_config.get("deploy-user", "")
+                    )
+                    Logger.recordMetadata(
+                        "Deploy Date", deploy_config.get("deploy-date", "")
+                    )
+                    Logger.recordMetadata(
+                        "Code Path", deploy_config.get("code-path", "")
+                    )
+                    Logger.recordMetadata("Git Hash", deploy_config.get("git-hash", ""))
+                    Logger.recordMetadata(
+                        "Git Branch", deploy_config.get("git-branch", "")
+                    )
+                    Logger.recordMetadata(
+                        "Git Description", deploy_config.get("git-desc", "")
+                    )
+                Logger.addDataReciever(NT4Publisher(True))
+                Logger.addDataReciever(WPILOGWriter())
+            case constants.RobotModes.REPLAY:
+                self.useTiming = False  # run as fast as possible
+                self.useTiming = True  # Mike Stitt added this
+                log_path = os.environ["LOG_PATH"]
+                log_path = os.path.abspath(log_path)
+                print(f"Starting log from {log_path}")
+                Logger.setReplaySource(WPILOGReader(log_path))
+                Logger.addDataReciever(WPILOGWriter(log_path[:-7] + "_sim.wpilog"))
+                Logger.addDataReciever(NT4Publisher(True))  # Mike Stitt added this
+
+        Logger.start()
 
     def robotInit(self) -> None:
 
@@ -212,7 +270,14 @@ class MyRobot(LoggedRobot):
         # Set up the RomiGyro
         self.gyro = romi.RomiGyro()
 
-
+        if constants.kRobotMode == constants.RobotModes.SIMULATION:
+            self.sim = DifferentialDrivetrainSim.createKitbotSim(
+                self.kGearbox,
+                self.kMotorReduction,
+                self.kWheelRadiusM,
+            )
+        else:
+            self.sim = None
 
         # Use inches as unit for encoder distances
         self.leftEncoder.setDistancePerPulse(
@@ -222,22 +287,23 @@ class MyRobot(LoggedRobot):
             (pi * self.kWheelDiameterInch) / self.kCountsPerRevolution
         )
 
-
-        driveLeftEncoderDistanceInches =  self.getLeftDriveDistanceInches()
-        driveRightEncoderDistanceInches = self.getRightDriveDistanceInches()
-
-        log("driveLeftEncoderDistanceInches", driveLeftEncoderDistanceInches, "inches")
-        log("driveRightEncoderDistanceInches",driveLeftEncoderDistanceInches, "inches")
-
-        self.lastLeftEncoderDistanceM  = driveLeftEncoderDistanceInches * self.kMetersPerInch
-        self.lastRightEncoderDistanceM = driveRightEncoderDistanceInches * self.kMetersPerInch
-
         self.kinematics = DifferentialDriveKinematics(self.kTrackWidthM)
+
+        self.updateInputsEncodersToDistances()
+
+        self._lastLeftEncoderDistanceM = self._leftEncoderDistanceM
+        self._lastRightEncoderDistanceM = self._rightEncoderDistanceM
+
+        self._rawOdometryRotation = Rotation2d()
 
         self.poseEstimator = DifferentialDrivePoseEstimator(
             self.kinematics, Rotation2d(), 0.0, 0.0, Pose2d()
         )
-        self.rawGyroRotation = Rotation2d()
+
+        self.zeroGamePadInputs()
+        self.updateInputs()
+
+
 
     def robotPeriodic(self) -> None:
         """This function is called every 20 ms, no matter the mode. Use this for items like diagnostics
@@ -246,45 +312,6 @@ class MyRobot(LoggedRobot):
         This runs after the mode specific periodic functions, but before LiveWindow and
         SmartDashboard integrated updating."""
 
-        leftEncoderCount = self.rightEncoder.get()
-        rightEncoderCount = self.leftEncoder.get()
-        log("driveLeftEncoderCount", leftEncoderCount, "counts")
-        log("driveRightEncoderCount", rightEncoderCount, "counts")
-
-        driveLeftEncoderDistanceInches =  self.getLeftDriveDistanceInches()
-        driveRightEncoderDistanceInches = self.getRightDriveDistanceInches()
-
-        log("driveLeftEncoderDistanceInches", driveLeftEncoderDistanceInches, "inches")
-        log("driveRightEncoderDistanceInches",driveLeftEncoderDistanceInches, "inches")
-
-        leftEncoderDistanceM = driveLeftEncoderDistanceInches * self.kMetersPerInch
-        rightEncoderDistanceM = driveRightEncoderDistanceInches * self.kMetersPerInch
-
-
-        self.yawPositionDeg = -self.gyro.getAngle() / self.kRadiansPerDegree
-        self.yawVelocityDegPerSec = -self.gyro.getRate() / self.kRadiansPerDegree
-        self.yawPosition = Rotation2d.fromDegrees(self.yawPositionDeg)
-
-        log("driveGyroYaw", self.yawPositionDeg, "deg")
-
-        twist = self.kinematics.toTwist2d(
-            leftEncoderDistanceM - self.lastLeftEncoderDistanceM,
-            rightEncoderDistanceM - self.lastRightEncoderDistanceM,
-        )
-
-        # TODO This seems misleading it's called rawGyroRotation,
-        #  but it seems entirely based upon wheel odometry
-        self.rawGyroRotation = self.rawGyroRotation + Rotation2d(twist.dtheta)
-
-        self.lastLeftEncoderDistanceM = leftEncoderDistanceM
-        self.lastRightEncoderDistanceM = rightEncoderDistanceM
-
-        self.poseEstimator.update(
-            self.rawGyroRotation, leftEncoderDistanceM, rightEncoderDistanceM
-        )
-
-        if self.autonomousCommand is not None:
-            log("autonomousCommand", self.autonomousCommand.option_number, "int")
 
         # Runs the Scheduler. This is responsible for polling buttons, adding
         # newly-scheduled commands, running already-scheduled commands, removing
@@ -306,6 +333,7 @@ class MyRobot(LoggedRobot):
 
     def autonomousInit(self) -> None:
         """This autonomous runs the autonomous command selected by your RobotContainer class."""
+        self.zeroGamePadInputs()
         self.autonomousCommand = self.chooser.getSelected()
 
         if self.autonomousCommand is not None:
@@ -315,6 +343,8 @@ class MyRobot(LoggedRobot):
     def autonomousPeriodic(self) -> None:
         """This function is called periodically during autonomous"""
        # TODO was self.autonomousCommand.periodic()
+        self.updateInputs()
+        self.updateMotorSpeeds()
 
 
     def teleopInit(self) -> None:
@@ -326,17 +356,9 @@ class MyRobot(LoggedRobot):
 
     def teleopPeriodic(self) -> None:
         """This function is called periodically during operator control"""
-        rawForward = self.forward()
-        rawRotation = self.rotation()
-
-        forward = deadband(rawForward, 0.1) * self.slowMultiplier()
-        rotation = deadband(rawRotation, 0.1) * self.slowMultiplier()
-
-        speeds = DifferentialDrive.arcadeDriveIK(forward, rotation, False)
-        self.setMotorSpeeds(speeds)
-
-        log("driveForwardCmd", rawForward, "ratio")
-        log("driveRotationCmd", rawRotation, "ratio")
+        self.updateGamePadInputs()
+        self.updateInputs()
+        self.updateMotorSpeeds()
 
     def testInit(self) -> None:
         pass
@@ -346,25 +368,140 @@ class MyRobot(LoggedRobot):
         self.leftEncoder.reset()
         self.rightEncoder.reset()
 
-    def forward(self):
-        return -self.controller.getRawAxis(1)
+    def updateInputsEncodersToDistances(self):
+        if self.sim is not None:
+            self._leftDriveDistanceInches = self.sim.getLeftPositionInches()
+            self._rightDriveDistanceInches = self.sim.getRightPositionInches()
+        else:
+            self._leftDriveDistanceInches = -self.leftEncoder.getDistance()
+            self._rightDriveDistanceInches = -self.rightEncoder.getDistance()
 
-    def rotation(self):
-        return -self.controller.getRawAxis(4)
+        self._leftEncoderDistanceM = self._leftDriveDistanceInches* self.kMetersPerInch
+        self._rightEncoderDistanceM = self._rightDriveDistanceInches * self.kMetersPerInch
 
-    def slowMultiplier(self):
-        return 1.0 if (self.controller.getRawButton(6)) else 0.25
+    def zeroGamePadInputs(self):
+        self._rawForwardCommand = 0.0
+        self._rawRotationCommand = 0.0
+        self._slowMultiplier = 0.25
+        self._forwardCommand = 0.0
+        self._rotationCommand = 0.0
 
-    def getLeftDriveDistanceInches(self):
+    def updateGamePadInputs(self):
+        self._rawForwardCommand = -self.controller.getRawAxis(1)
+        self._rawRotationCommand = -self.controller.getRawAxis(4)
+        self._slowMultiplier = 1.0 if (self.controller.getRawButton(6)) else 0.25
+
+        self.setForwardAndRotationCommands(
+            forwardCommand=deadband(self._rawForwardCommand, 0.1) * self.slowMultiplier(),
+            rotationCommand=deadband(self._rawRotationCommand, 0.1) * self.slowMultiplier()
+        )
+
+    def updateInputs(self):
+
+
+        self.updateInputsEncodersToDistances()
+
+        self._yawPositionDeg = -self.gyro.getAngle() / self.kRadiansPerDegree
+        self._yawVelocityDegPerSec = -self.gyro.getRate() / self.kRadiansPerDegree
+        self._yawPosition = Rotation2d.fromDegrees(self._yawPositionDeg)
+
+        twist = self.kinematics.toTwist2d(
+            self._leftEncoderDistanceM - self._lastLeftEncoderDistanceM,
+            self._rightEncoderDistanceM - self._lastRightEncoderDistanceM,
+        )
+
+        # TODO This seems misleading it's called rawGyroRotation,
+        #  but it seems entirely based upon wheel odometry
+        self._rawOdometryRotation = self._rawOdometryRotation + Rotation2d(twist.dtheta)
+
+        self._lastLeftEncoderDistanceM = self._leftEncoderDistanceM
+        self._lastRightEncoderDistanceM = self._rightEncoderDistanceM
+
+        self.poseEstimator.update(
+            self._rawOdometryRotation, self._leftEncoderDistanceM, self._rightEncoderDistanceM
+        )
+
+    def setForwardAndRotationCommands(self, forwardCommand: float, rotationCommand: float):
+        self._forwardCommand = forwardCommand
+        self._rotationCommand = rotationCommand
+
+    def updateMotorSpeeds(self):
+        speeds = DifferentialDrive.arcadeDriveIK(self._forwardCommand, self._rotationCommand, False)
+        kRatioToVolts = 12.0
+        self._leftMotorSetVoltage = speeds.left * kRatioToVolts
+        self._rightMotorSetVoltage = speeds.right * kRatioToVolts
+        self.leftMotor.setVoltage(self._leftMotorSetVoltage)
+        self.rightMotor.setVoltage(self._rightMotorSetVoltage)
+        if self.sim is not None:
+            self.sim.setInputs(
+                clamp(self._leftMotorSetVoltage, -12.0, 12.0),
+                clamp(self._rightMotorSetVoltage, -12.0, 12.0),
+            )
+            self.sim.update(constants.kRobotPeriod)
+
+    @autolog_output(key="Inputs/autonomousCommandNum", custom_type="int")
+    def getAutonomousCommandNum(self) -> int:
+        result = -1
+        if self.autonomousCommand is not None:
+            result = self.autonomousCommand.option_number
+        return result
+
+    @autolog_output(key="Inputs/rawForwardCommand", custom_type="ratio")
+    def rawForwardCommand (self) -> float:
+        return self._rawForwardCommand
+
+    @autolog_output(key="Inputs/rawRotationCommand", custom_type="ratio")
+    def rawRotationCommand (self) -> float:
+        return self._rawRotationCommand
+
+    @autolog_output(key="Inputs/slowMultiplier", custom_type="ratio")
+    def slowMultiplier(self) -> float:
+        return self._slowMultiplier
+
+    @autolog_output(key="Inputs/forwardCommand", custom_type="ratio")
+    def forwardCommand(self) -> float:
+        return self._forwardCommand
+
+    @autolog_output(key="Inputs/rotationCommand", custom_type="ratio")
+    def rotationCommand(self) -> float:
+        return self._rotationCommand
+
+    @autolog_output(key="Inputs/leftMotorVolts", custom_type="V")
+    def leftMotorVoltage(self) -> float:
+        return self.leftMotor.getVoltage()
+
+    @autolog_output(key="Inputs/rightMotorVolts", custom_type="V")
+    def rightMotorVoltage(self) -> float:
+        return self.leftMotor.getVoltage()
+
+    @autolog_output(key="Inputs/leftDriveDistanceInches", custom_type="in")
+    def leftDriveDistanceInches(self) -> float:
         return -self.leftEncoder.getDistance()
 
-
-    def getRightDriveDistanceInches(self):
+    @autolog_output(key="Inputs/rightDriveDistanceInches", custom_type="in")
+    def rightDriveDistanceInches(self) -> float:
         return -self.rightEncoder.getDistance()
 
-    def setMotorSpeeds(self, speeds):
-        self.leftMotor.setVoltage(speeds.left*12)
-        self.rightMotor.setVoltage(speeds.right*12)
+    @autolog_output(key="Inputs/yawPositionDeg", custom_type="deg")
+    def yawPositionDeg(self) -> float:
+        return self._yawPositionDeg
+
+    @autolog_output(key="Inputs/yawVelocityDegPerSec", custom_type="deg/s")
+    def yawVelocityDegPerSec(self) -> float:
+        return self._yawVelocityDegPerSec
+
+    @autolog_output(key="Inputs/yawPosition")
+    def yawPosition(self) -> Rotation2d:
+        return self._yawPosition
+
+    @autolog_output(key="Outputs/rawOdometryRotation")
+    def rawOdometryRotation(self) -> Rotation2d:
+        return self._rawOdometryRotation
+
+    @autolog_output(key="Odometry/Robot")
+    def getPose(self) -> Pose2d:
+        return self.poseEstimator.getEstimatedPosition()
+
 
 if __name__ == "__main__":
     wpilib.run(MyRobot)
