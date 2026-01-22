@@ -65,6 +65,17 @@ from commands2 import (
     Command,
     TimedCommandRobot,
 )
+from pykit.wpilog.wpilogwriter import WPILOGWriter
+from pykit.wpilog.wpilogreader import WPILOGReader
+from pykit.networktables.nt4Publisher import NT4Publisher
+from pykit.loggedrobot import LoggedRobot
+from pykit.logger import Logger
+
+
+from commands2 import CommandScheduler, Command, cmd
+
+from commands2.button import Trigger
+
 
 from utils.signalLogging import SignalWrangler
 from utils.signalLogging import log
@@ -81,7 +92,7 @@ os.environ["HALSIMWS_HOST"] = "10.0.0.2"
 os.environ["HALSIMWS_PORT"] = "3300"
 
 
-class AutoState1():
+class AutoDriveForward1Sec():
     def __init__(self, robot, option_number):
         self.robot = robot
         self.state = 'start'
@@ -94,28 +105,34 @@ class AutoState1():
             'stop': 3,
         }
 
+
     def start(self):
         self.state = 'start'
 
-    def periodic(self):
-        now = wpilib.Timer.getFPGATimestamp()
-        speeds = DifferentialDrive.WheelSpeeds()
-        match self.state:
-            case 'start':
-                self.entered_state_time = wpilib.Timer.getFPGATimestamp()
-                self.state = 'drive'
-                speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
-            case 'drive':
-                if now-self.entered_state_time>1.0:
-                    self.state = 'stop'
-                    speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
-                else:
-                    speeds = DifferentialDrive.arcadeDriveIK(0.5, 0, False)
-            case 'stop' | _:
-                speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
-        self.robot.setMotorSpeeds(speeds)
 
-        log("autostate", self.state_to_int(), "int")
+    def getCommand(self) -> Command:
+        def run():
+            now = wpilib.Timer.getFPGATimestamp()
+            speeds = DifferentialDrive.WheelSpeeds()
+            match self.state:
+                case 'start':
+                    self.entered_state_time = wpilib.Timer.getFPGATimestamp()
+                    self.state = 'drive'
+                    speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
+                case 'drive':
+                    if now-self.entered_state_time>1.0:
+                        self.state = 'stop'
+                        speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
+                    else:
+                        speeds = DifferentialDrive.arcadeDriveIK(0.5, 0, False)
+                case 'stop' | _:
+                    speeds = DifferentialDrive.arcadeDriveIK(0, 0, False)
+            self.robot.setMotorSpeeds(speeds)
+
+            log("autostate", self.state_to_int(), "int")
+
+        result = cmd.run(run, None).withName(f"AutoDriveForward1Sec[{self.option_number}]")
+        return result
 
     def state_to_int(self):
         result = -1
@@ -124,7 +141,7 @@ class AutoState1():
         return result
 
 
-class MyRobot(TimedCommandRobot):
+class MyRobot(LoggedRobot):
     """
     Command v2 robots are encouraged to inherit from TimedCommandRobot, which
     has an implementation of robotPeriodic which runs the scheduler for you
@@ -168,9 +185,9 @@ class MyRobot(TimedCommandRobot):
 
         self.chooser = wpilib.SendableChooser()
         self.chooser.setDefaultOption(
-            "Auto Routine 1",AutoState1(self,1)
+            "Auto Routine 1", AutoDriveForward1Sec(self, 1)
         )
-        self.chooser.addOption("Auto Routine 2 - same as 1", AutoState1(self,2))
+        self.chooser.addOption("Auto Routine 2 - same as 1", AutoDriveForward1Sec(self, 2))
         wpilib.SmartDashboard.putData("Auto choices", self.chooser)
 
         # The Romi has the left and right motors set to
@@ -269,7 +286,17 @@ class MyRobot(TimedCommandRobot):
         if self.autonomousCommand is not None:
             log("autonomousCommand", self.autonomousCommand.option_number, "int")
 
+        # Runs the Scheduler. This is responsible for polling buttons, adding
+        # newly-scheduled commands, running already-scheduled commands, removing
+        # finished or interrupted commands, and running subsystem periodic() methods.
+        # This must be called from the robot's periodic block in order for anything in
+        # the Command-based framework to work.
+        CommandScheduler.getInstance().run()
+        
+        # Run Robot Casserole's Signal Wrangler to publish logs under their system
         SignalWrangler().publishPeriodic()
+
+
 
     def disabledInit(self) -> None:
         """This function is called once each time the robot enters Disabled mode."""
@@ -280,12 +307,14 @@ class MyRobot(TimedCommandRobot):
     def autonomousInit(self) -> None:
         """This autonomous runs the autonomous command selected by your RobotContainer class."""
         self.autonomousCommand = self.chooser.getSelected()
-        self.autonomousCommand.start()
 
+        if self.autonomousCommand is not None:
+            self.autonomousCommand.start()
+            CommandScheduler.getInstance().schedule(self.autonomousCommand.getCommand())
 
     def autonomousPeriodic(self) -> None:
         """This function is called periodically during autonomous"""
-        self.autonomousCommand.periodic()
+       # TODO was self.autonomousCommand.periodic()
 
 
     def teleopInit(self) -> None:
@@ -337,4 +366,5 @@ class MyRobot(TimedCommandRobot):
         self.leftMotor.setVoltage(speeds.left*12)
         self.rightMotor.setVoltage(speeds.right*12)
 
-
+if __name__ == "__main__":
+    wpilib.run(MyRobot)
