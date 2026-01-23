@@ -358,6 +358,13 @@ class MyRobot(LoggedRobot):
     def testInit(self) -> None:
         pass
 
+    def testPeriodic(self) -> None:
+        pass
+
+    def endCompetition(self) -> None:
+        super().endCompetition()
+
+
     def resetEncoders(self) -> None:
         """Resets the drive encoders to currently read a position of 0."""
         self.leftEncoder.reset()
@@ -434,54 +441,54 @@ class MyRobot(LoggedRobot):
             )
             self.sim.update(constants.kRobotPeriod)
 
-    @autolog_output(key="Inputs/autonomousCommandNum", custom_type="int")
+    @autolog_output(key="Inputs/autonomousCommandNum")
     def getAutonomousCommandNum(self) -> int:
         result = -1
         if self.autonomousCommand is not None:
             result = self.autonomousCommand.option_number
         return result
 
-    @autolog_output(key="Inputs/rawForwardCommand", custom_type="ratio")
+    @autolog_output(key="Inputs/rawForwardCommand")
     def rawForwardCommand (self) -> float:
         return self._rawForwardCommand
 
-    @autolog_output(key="Inputs/rawRotationCommand", custom_type="ratio")
+    @autolog_output(key="Inputs/rawRotationCommand")
     def rawRotationCommand (self) -> float:
         return self._rawRotationCommand
 
-    @autolog_output(key="Inputs/slowMultiplier", custom_type="ratio")
+    @autolog_output(key="Inputs/slowMultiplier")
     def slowMultiplier(self) -> float:
         return self._slowMultiplier
 
-    @autolog_output(key="Inputs/forwardCommand", custom_type="ratio")
+    @autolog_output(key="Inputs/forwardCommand")
     def forwardCommand(self) -> float:
         return self._forwardCommand
 
-    @autolog_output(key="Inputs/rotationCommand", custom_type="ratio")
+    @autolog_output(key="Inputs/rotationCommand")
     def rotationCommand(self) -> float:
         return self._rotationCommand
 
-    @autolog_output(key="Inputs/leftMotorVolts", custom_type="V")
+    @autolog_output(key="Inputs/leftMotorVolts")
     def leftMotorVoltage(self) -> float:
         return self.leftMotor.getVoltage()
 
-    @autolog_output(key="Inputs/rightMotorVolts", custom_type="V")
+    @autolog_output(key="Inputs/rightMotorVolts")
     def rightMotorVoltage(self) -> float:
         return self.leftMotor.getVoltage()
 
-    @autolog_output(key="Inputs/leftDriveDistanceInches", custom_type="in")
+    @autolog_output(key="Inputs/leftDriveDistanceInches")
     def leftDriveDistanceInches(self) -> float:
         return -self.leftEncoder.getDistance()
 
-    @autolog_output(key="Inputs/rightDriveDistanceInches", custom_type="in")
+    @autolog_output(key="Inputs/rightDriveDistanceInches")
     def rightDriveDistanceInches(self) -> float:
         return -self.rightEncoder.getDistance()
 
-    @autolog_output(key="Inputs/yawPositionDeg", custom_type="deg")
+    @autolog_output(key="Inputs/yawPositionDeg")
     def yawPositionDeg(self) -> float:
         return self._yawPositionDeg
 
-    @autolog_output(key="Inputs/yawVelocityDegPerSec", custom_type="deg/s")
+    @autolog_output(key="Inputs/yawVelocityDegPerSec")
     def yawVelocityDegPerSec(self) -> float:
         return self._yawVelocityDegPerSec
 
