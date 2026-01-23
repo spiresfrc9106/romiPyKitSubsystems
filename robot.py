@@ -53,9 +53,14 @@ import romi
 import wpilib
 from wpilib import (
     Encoder,
+    Joystick,
     RobotBase,
+    SendableChooser,
+    SmartDashboard,
     Spark,
+    Timer,
 )
+from wpilib.deployinfo import getDeployData
 from wpilib.drive import DifferentialDrive
 from wpimath.estimator import DifferentialDrivePoseEstimator
 from wpimath.geometry import (
@@ -91,8 +96,6 @@ from commands2 import CommandScheduler, Command, cmd
 from commands2.button import Trigger
 
 import constants
-from utils.signalLogging import SignalWrangler
-from utils.signalLogging import log
 from utils.helpfulmath import deadband
 from utils.helpfulmath import clamp
 
@@ -127,11 +130,11 @@ class AutoDriveForward1Sec():
 
     def getCommand(self) -> Command:
         def run():
-            now = wpilib.Timer.getFPGATimestamp()
+            now = Timer.getFPGATimestamp()
             speeds = DifferentialDrive.WheelSpeeds()
             match self.state:
                 case 'start':
-                    self.entered_state_time = wpilib.Timer.getFPGATimestamp()
+                    self.entered_state_time = Timer.getFPGATimestamp()
                     self.state = 'drive'
                     self.robot.setForwardAndRotationCommands(0.0, 0.0)
                 case 'drive':
@@ -143,7 +146,7 @@ class AutoDriveForward1Sec():
                 case 'stop' | _:
                     self.robot.setForwardAndRotationCommands(0.0, 0.0)
 
-            log("autostate", self.state_to_int(), "int")
+            Logger.recordOutput("autostate", self.state_to_int())
 
         result = cmd.run(run, None).withName(f"AutoDriveForward1Sec[{self.option_number}]")
         return result
@@ -187,7 +190,7 @@ class MyRobot(LoggedRobot):
 
         match constants.kRobotMode:
             case constants.RobotModes.REAL|constants.RobotModes.SIMULATION:
-                deploy_config = wpilib.deployinfo.getDeployData()
+                deploy_config = getDeployData()
                 if deploy_config is not None:
                     Logger.recordMetadata(
                         "Deploy Host", deploy_config.get("deploy-host", "")
@@ -237,35 +240,31 @@ class MyRobot(LoggedRobot):
         )
 
         # Assumes a gamepad plugged into channnel 0
-        self.controller = wpilib.Joystick(0)
+        self.controller = Joystick(0)
 
         # Create SmartDashboard chooser for autonomous routines
 
-        self.chooser = wpilib.SendableChooser()
+        self.chooser = SendableChooser()
         self.chooser.setDefaultOption(
             "Auto Routine 1", AutoDriveForward1Sec(self, 1)
         )
         self.chooser.addOption("Auto Routine 2 - same as 1", AutoDriveForward1Sec(self, 2))
-        wpilib.SmartDashboard.putData("Auto choices", self.chooser)
+        SmartDashboard.putData("Auto choices", self.chooser)
 
         # The Romi has the left and right motors set to
         # PWM channels 0 and 1 respectively
-        self.leftMotor = wpilib.Spark(0)
+        self.leftMotor = Spark(0)
         self.leftMotor.setInverted(False)
-        self.rightMotor = wpilib.Spark(1)
+        self.rightMotor = Spark(1)
         self.rightMotor.setInverted(True)
 
         # The Romi has onboard encoders that are hardcoded
         # to use DIO pins 4/5 and 6/7 for the left and right
-        self.leftEncoder = wpilib.Encoder(4, 5)
+        self.leftEncoder = Encoder(4, 5)
 
-        self.rightEncoder = wpilib.Encoder(6, 7)
+        self.rightEncoder = Encoder(6, 7)
 
         self.resetEncoders()
-
-
-        # Set up the differential drive controller
-        #self.drive = wpilib.drive.DifferentialDrive(self.leftMotor, self.rightMotor)
 
         # Set up the RomiGyro
         self.gyro = romi.RomiGyro()
@@ -319,10 +318,6 @@ class MyRobot(LoggedRobot):
         # This must be called from the robot's periodic block in order for anything in
         # the Command-based framework to work.
         CommandScheduler.getInstance().run()
-        
-        # Run Robot Casserole's Signal Wrangler to publish logs under their system
-        SignalWrangler().publishPeriodic()
-
 
 
     def disabledInit(self) -> None:
@@ -362,6 +357,13 @@ class MyRobot(LoggedRobot):
 
     def testInit(self) -> None:
         pass
+
+    def testPeriodic(self) -> None:
+        pass
+
+    def endCompetition(self) -> None:
+        super().endCompetition()
+
 
     def resetEncoders(self) -> None:
         """Resets the drive encoders to currently read a position of 0."""
@@ -439,54 +441,54 @@ class MyRobot(LoggedRobot):
             )
             self.sim.update(constants.kRobotPeriod)
 
-    @autolog_output(key="Inputs/autonomousCommandNum", custom_type="int")
+    @autolog_output(key="Inputs/autonomousCommandNum")
     def getAutonomousCommandNum(self) -> int:
         result = -1
         if self.autonomousCommand is not None:
             result = self.autonomousCommand.option_number
         return result
 
-    @autolog_output(key="Inputs/rawForwardCommand", custom_type="ratio")
+    @autolog_output(key="Inputs/rawForwardCommand")
     def rawForwardCommand (self) -> float:
         return self._rawForwardCommand
 
-    @autolog_output(key="Inputs/rawRotationCommand", custom_type="ratio")
+    @autolog_output(key="Inputs/rawRotationCommand")
     def rawRotationCommand (self) -> float:
         return self._rawRotationCommand
 
-    @autolog_output(key="Inputs/slowMultiplier", custom_type="ratio")
+    @autolog_output(key="Inputs/slowMultiplier")
     def slowMultiplier(self) -> float:
         return self._slowMultiplier
 
-    @autolog_output(key="Inputs/forwardCommand", custom_type="ratio")
+    @autolog_output(key="Inputs/forwardCommand")
     def forwardCommand(self) -> float:
         return self._forwardCommand
 
-    @autolog_output(key="Inputs/rotationCommand", custom_type="ratio")
+    @autolog_output(key="Inputs/rotationCommand")
     def rotationCommand(self) -> float:
         return self._rotationCommand
 
-    @autolog_output(key="Inputs/leftMotorVolts", custom_type="V")
+    @autolog_output(key="Inputs/leftMotorVolts")
     def leftMotorVoltage(self) -> float:
         return self.leftMotor.getVoltage()
 
-    @autolog_output(key="Inputs/rightMotorVolts", custom_type="V")
+    @autolog_output(key="Inputs/rightMotorVolts")
     def rightMotorVoltage(self) -> float:
         return self.leftMotor.getVoltage()
 
-    @autolog_output(key="Inputs/leftDriveDistanceInches", custom_type="in")
+    @autolog_output(key="Inputs/leftDriveDistanceInches")
     def leftDriveDistanceInches(self) -> float:
         return -self.leftEncoder.getDistance()
 
-    @autolog_output(key="Inputs/rightDriveDistanceInches", custom_type="in")
+    @autolog_output(key="Inputs/rightDriveDistanceInches")
     def rightDriveDistanceInches(self) -> float:
         return -self.rightEncoder.getDistance()
 
-    @autolog_output(key="Inputs/yawPositionDeg", custom_type="deg")
+    @autolog_output(key="Inputs/yawPositionDeg")
     def yawPositionDeg(self) -> float:
         return self._yawPositionDeg
 
-    @autolog_output(key="Inputs/yawVelocityDegPerSec", custom_type="deg/s")
+    @autolog_output(key="Inputs/yawVelocityDegPerSec")
     def yawVelocityDegPerSec(self) -> float:
         return self._yawVelocityDegPerSec
 
