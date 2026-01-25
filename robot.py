@@ -235,10 +235,6 @@ class MyRobot(LoggedRobot):
         # to ignore these instantiations in a method.
         # pylint: disable=attribute-defined-outside-init
 
-        self.onboardIO = romi.OnBoardIO(
-            romi.OnBoardIO.ChannelMode.INPUT, romi.OnBoardIO.ChannelMode.INPUT
-        )
-
         # Assumes a gamepad plugged into channnel 0
         self.controller = Joystick(0)
 
@@ -301,6 +297,8 @@ class MyRobot(LoggedRobot):
 
         self.zeroGamePadInputs()
         self.updateInputs()
+        self._leftMotorSetVoltage = 0.0
+        self._rightMotorSetVoltage = 0.0
 
 
 
@@ -375,22 +373,22 @@ class MyRobot(LoggedRobot):
             self._leftDriveDistanceInches = self.sim.getLeftPositionInches()
             self._rightDriveDistanceInches = self.sim.getRightPositionInches()
         else:
-            self._leftDriveDistanceInches = -self.leftEncoder.getDistance()
-            self._rightDriveDistanceInches = -self.rightEncoder.getDistance()
+            self._leftDriveDistanceInches = self.leftEncoder.getDistance()
+            self._rightDriveDistanceInches = self.rightEncoder.getDistance()
 
         self._leftEncoderDistanceM = self._leftDriveDistanceInches * self.kMetersPerInch
         self._rightEncoderDistanceM = self._rightDriveDistanceInches * self.kMetersPerInch
 
     def zeroGamePadInputs(self):
-        self._rawForwardCommand = 0.0
-        self._rawRotationCommand = 0.0
+        self._forwardCommandRaw = 0.0
+        self._rotationCommandRaw = 0.0
         self._slowMultiplier = 0.25
         self._forwardCommand = 0.0
         self._rotationCommand = 0.0
 
     def updateGamePadInputs(self):
-        self._rawForwardCommand = -self.controller.getRawAxis(1)
-        self._rawRotationCommand = -self.controller.getRawAxis(4)
+        self._forwardCommandRaw = -self.controller.getRawAxis(1)
+        self._rotationCommandRaw = -self.controller.getRawAxis(4)
         self._slowMultiplier = 1.0 if (self.controller.getRawButton(6)) else 0.25
 
         forwardCommandWithDeadband = deadband(self._rawForwardCommand, 0.1)
@@ -408,9 +406,9 @@ class MyRobot(LoggedRobot):
 
         self.updateInputsEncodersToDistances()
 
-        self._yawPositionDeg = -self.gyro.getAngle() / self.kRadiansPerDegree
-        self._yawVelocityDegPerSec = -self.gyro.getRate() / self.kRadiansPerDegree
-        self._yawPosition = Rotation2d.fromDegrees(self._yawPositionDeg)
+        self._gyroYawPositionDeg = -self.gyro.getAngle() / self.kRadiansPerDegree
+        self._gyroYawVelocityDegPerSec = -self.gyro.getRate() / self.kRadiansPerDegree
+        self._gyroYawPosition = Rotation2d.fromDegrees(self._gyroYawPositionDeg)
 
         twist = self.kinematics.toTwist2d(
             self._leftEncoderDistanceM - self._lastLeftEncoderDistanceM,
@@ -453,23 +451,23 @@ class MyRobot(LoggedRobot):
             result = self.autonomousCommand.option_number
         return result
 
-    @autolog_output(key="Inputs/rawForwardCommand")
+    @autolog_output(key="Inputs/Driver/forwardCommandRaw")
     def rawForwardCommand (self) -> float:
-        return self._rawForwardCommand
+        return self._forwardCommandRaw
 
-    @autolog_output(key="Inputs/rawRotationCommand")
+    @autolog_output(key="Inputs/Driver/rotationCommandRaw")
     def rawRotationCommand (self) -> float:
-        return self._rawRotationCommand
+        return self._rotationCommandRaw
 
-    @autolog_output(key="Inputs/slowMultiplier")
+    @autolog_output(key="Inputs/Driver/slowMultiplier")
     def slowMultiplier(self) -> float:
         return self._slowMultiplier
 
-    @autolog_output(key="Inputs/forwardCommand")
+    @autolog_output(key="Inputs/Driver/forwardCommand")
     def forwardCommand(self) -> float:
         return self._forwardCommand
 
-    @autolog_output(key="Inputs/rotationCommand")
+    @autolog_output(key="Inputs/Driver/rotationCommand")
     def rotationCommand(self) -> float:
         return self._rotationCommand
 
@@ -481,6 +479,14 @@ class MyRobot(LoggedRobot):
     def rightMotorVoltage(self) -> float:
         return self.leftMotor.getVoltage()
 
+    @autolog_output(key="Outputs/leftMotorSetVolts")
+    def leftMotorSetVoltage(self) -> float:
+        return self._leftMotorSetVoltage
+
+    @autolog_output(key="Outputs/rightMotorSetVolts")
+    def rightMotorSetVoltage(self) -> float:
+        return self._rightMotorSetVoltage
+
     @autolog_output(key="Inputs/leftDriveDistanceInches")
     def leftDriveDistanceInches(self) -> float:
         return self._leftDriveDistanceInches
@@ -489,23 +495,23 @@ class MyRobot(LoggedRobot):
     def rightDriveDistanceInches(self) -> float:
         return self._rightDriveDistanceInches
 
-    @autolog_output(key="Inputs/yawPositionDeg")
+    @autolog_output(key="Inputs/gyroYawPositionDeg")
     def yawPositionDeg(self) -> float:
-        return self._yawPositionDeg
+        return self._gyroYawPositionDeg
 
-    @autolog_output(key="Inputs/yawVelocityDegPerSec")
+    @autolog_output(key="Inputs/gyroYawVelocityDegPerSec")
     def yawVelocityDegPerSec(self) -> float:
-        return self._yawVelocityDegPerSec
+        return self._gyroYawVelocityDegPerSec
 
-    @autolog_output(key="Inputs/yawPosition")
+    @autolog_output(key="Inputs/gyroYawPosition")
     def yawPosition(self) -> Rotation2d:
-        return self._yawPosition
+        return self._gyroYawPosition
 
-    @autolog_output(key="Outputs/rawOdometryRotation")
-    def rawOdometryRotation(self) -> Rotation2d:
-        return self._rawOdometryRotation
+    @autolog_output(key="Outputs/rawOdometryRotationDeg")
+    def rawOdometryRotation(self) -> float:
+        return self._rawOdometryRotation.degrees()
 
-    @autolog_output(key="Odometry/Robot")
+    @autolog_output(key="Outputs/Odometry/Robot")
     def getPose(self) -> Pose2d:
         return self.poseEstimator.getEstimatedPosition()
 
