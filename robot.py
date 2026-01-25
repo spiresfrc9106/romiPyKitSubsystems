@@ -391,8 +391,8 @@ class MyRobot(LoggedRobot):
         self._rotationCommandRaw = -self.controller.getRawAxis(4)
         self._slowMultiplier = 1.0 if (self.controller.getRawButton(6)) else 0.25
 
-        forwardCommandWithDeadband = deadband(self._rawForwardCommand, 0.1)
-        rotationCommandWithDeadband = deadband(self._rawRotationCommand, 0.1)
+        forwardCommandWithDeadband = deadband(self._forwardCommandRaw, 0.1)
+        rotationCommandWithDeadband = deadband(self._rotationCommandRaw, 0.1)
 
         forwardCommand = forwardCommandWithDeadband * self._slowMultiplier
         rotationCommand = rotationCommandWithDeadband * self._slowMultiplier
