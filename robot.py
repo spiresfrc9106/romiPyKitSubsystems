@@ -378,7 +378,7 @@ class MyRobot(LoggedRobot):
             self._leftDriveDistanceInches = -self.leftEncoder.getDistance()
             self._rightDriveDistanceInches = -self.rightEncoder.getDistance()
 
-        self._leftEncoderDistanceM = self._leftDriveDistanceInches* self.kMetersPerInch
+        self._leftEncoderDistanceM = self._leftDriveDistanceInches * self.kMetersPerInch
         self._rightEncoderDistanceM = self._rightDriveDistanceInches * self.kMetersPerInch
 
     def zeroGamePadInputs(self):
@@ -393,13 +393,18 @@ class MyRobot(LoggedRobot):
         self._rawRotationCommand = -self.controller.getRawAxis(4)
         self._slowMultiplier = 1.0 if (self.controller.getRawButton(6)) else 0.25
 
+        forwardCommandWithDeadband = deadband(self._rawForwardCommand, 0.1)
+        rotationCommandWithDeadband = deadband(self._rawRotationCommand, 0.1)
+
+        forwardCommand = forwardCommandWithDeadband * self._slowMultiplier
+        rotationCommand = rotationCommandWithDeadband * self._slowMultiplier
+
         self.setForwardAndRotationCommands(
-            forwardCommand=deadband(self._rawForwardCommand, 0.1) * self.slowMultiplier(),
-            rotationCommand=deadband(self._rawRotationCommand, 0.1) * self.slowMultiplier()
+            forwardCommand=forwardCommand,
+            rotationCommand=rotationCommand
         )
 
     def updateInputs(self):
-
 
         self.updateInputsEncodersToDistances()
 
@@ -478,11 +483,11 @@ class MyRobot(LoggedRobot):
 
     @autolog_output(key="Inputs/leftDriveDistanceInches")
     def leftDriveDistanceInches(self) -> float:
-        return -self.leftEncoder.getDistance()
+        return self._leftDriveDistanceInches
 
     @autolog_output(key="Inputs/rightDriveDistanceInches")
     def rightDriveDistanceInches(self) -> float:
-        return -self.rightEncoder.getDistance()
+        return self._rightDriveDistanceInches
 
     @autolog_output(key="Inputs/yawPositionDeg")
     def yawPositionDeg(self) -> float:
