@@ -385,6 +385,8 @@ class MyRobot(LoggedRobot):
         self._slowMultiplier = 0.25
         self._forwardCommand = 0.0
         self._rotationCommand = 0.0
+        self._leftMotorSpeed = 0.0
+        self._rightMotorSpeed = 0.0
 
     def updateGamePadInputs(self):
         self._forwardCommandRaw = -self.controller.getRawAxis(1)
@@ -415,8 +417,6 @@ class MyRobot(LoggedRobot):
             self._rightEncoderDistanceM - self._lastRightEncoderDistanceM,
         )
 
-        # TODO This seems misleading it's called rawGyroRotation,
-        #  but it seems entirely based upon wheel odometry
         self._rawOdometryRotation = self._rawOdometryRotation + Rotation2d(twist.dtheta)
 
         self._lastLeftEncoderDistanceM = self._leftEncoderDistanceM
@@ -432,9 +432,13 @@ class MyRobot(LoggedRobot):
 
     def updateMotorSpeeds(self):
         speeds = DifferentialDrive.arcadeDriveIK(self._forwardCommand, self._rotationCommand, False)
+
+        self._leftMotorSpeed = speeds.left
+        self._rightMotorSpeed = speeds.right
+
         kRatioToVolts = 12.0
-        self._leftMotorSetVoltage = speeds.left * kRatioToVolts
-        self._rightMotorSetVoltage = speeds.right * kRatioToVolts
+        self._leftMotorSetVoltage = self._leftMotorSpeed * kRatioToVolts
+        self._rightMotorSetVoltage = self._rightMotorSpeed * kRatioToVolts
         self.leftMotor.setVoltage(self._leftMotorSetVoltage)
         self.rightMotor.setVoltage(self._rightMotorSetVoltage)
         if self.sim is not None:
@@ -486,6 +490,14 @@ class MyRobot(LoggedRobot):
     @autolog_output(key="Outputs/rightMotorSetVolts")
     def rightMotorSetVoltage(self) -> float:
         return self._rightMotorSetVoltage
+
+    @autolog_output(key="Outputs/leftMotorSpeed")
+    def leftMotorSpeed(self) -> float:
+        return self._leftMotorSpeed
+
+    @autolog_output(key="Outputs/rightSpeed")
+    def rightMotorSpeed(self) -> float:
+        return self._rightMotorSpeed
 
     @autolog_output(key="Inputs/leftDriveDistanceInches")
     def leftDriveDistanceInches(self) -> float:
