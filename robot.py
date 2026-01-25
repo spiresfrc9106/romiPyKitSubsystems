@@ -376,7 +376,7 @@ class MyRobot(LoggedRobot):
             self._leftDriveDistanceInches = self.leftEncoder.getDistance()
             self._rightDriveDistanceInches = self.rightEncoder.getDistance()
 
-        self._leftEncoderDistanceM = self._leftDriveDistanceInches* self.kMetersPerInch
+        self._leftEncoderDistanceM = self._leftDriveDistanceInches * self.kMetersPerInch
         self._rightEncoderDistanceM = self._rightDriveDistanceInches * self.kMetersPerInch
 
     def zeroGamePadInputs(self):
@@ -385,19 +385,26 @@ class MyRobot(LoggedRobot):
         self._slowMultiplier = 0.25
         self._forwardCommand = 0.0
         self._rotationCommand = 0.0
+        self._leftMotorSpeed = 0.0
+        self._rightMotorSpeed = 0.0
 
     def updateGamePadInputs(self):
         self._forwardCommandRaw = -self.controller.getRawAxis(1)
         self._rotationCommandRaw = -self.controller.getRawAxis(4)
         self._slowMultiplier = 1.0 if (self.controller.getRawButton(6)) else 0.25
 
+        forwardCommandWithDeadband = deadband(self._forwardCommandRaw, 0.1)
+        rotationCommandWithDeadband = deadband(self._rotationCommandRaw, 0.1)
+
+        forwardCommand = forwardCommandWithDeadband * self._slowMultiplier
+        rotationCommand = rotationCommandWithDeadband * self._slowMultiplier
+
         self.setForwardAndRotationCommands(
-            forwardCommand=deadband(self._forwardCommandRaw, 0.1) * self.slowMultiplier(),
-            rotationCommand=deadband(self._rotationCommandRaw, 0.1) * self.slowMultiplier()
+            forwardCommand=forwardCommand,
+            rotationCommand=rotationCommand
         )
 
     def updateInputs(self):
-
 
         self.updateInputsEncodersToDistances()
 
@@ -410,8 +417,6 @@ class MyRobot(LoggedRobot):
             self._rightEncoderDistanceM - self._lastRightEncoderDistanceM,
         )
 
-        # TODO This seems misleading it's called rawGyroRotation,
-        #  but it seems entirely based upon wheel odometry
         self._rawOdometryRotation = self._rawOdometryRotation + Rotation2d(twist.dtheta)
 
         self._lastLeftEncoderDistanceM = self._leftEncoderDistanceM
@@ -427,9 +432,13 @@ class MyRobot(LoggedRobot):
 
     def updateMotorSpeeds(self):
         speeds = DifferentialDrive.arcadeDriveIK(self._forwardCommand, self._rotationCommand, False)
+
+        self._leftMotorSpeed = speeds.left
+        self._rightMotorSpeed = speeds.right
+
         kRatioToVolts = 12.0
-        self._leftMotorSetVoltage = speeds.left * kRatioToVolts
-        self._rightMotorSetVoltage = speeds.right * kRatioToVolts
+        self._leftMotorSetVoltage = self._leftMotorSpeed * kRatioToVolts
+        self._rightMotorSetVoltage = self._rightMotorSpeed * kRatioToVolts
         self.leftMotor.setVoltage(self._leftMotorSetVoltage)
         self.rightMotor.setVoltage(self._rightMotorSetVoltage)
         if self.sim is not None:
@@ -482,13 +491,21 @@ class MyRobot(LoggedRobot):
     def rightMotorSetVoltage(self) -> float:
         return self._rightMotorSetVoltage
 
+    @autolog_output(key="Outputs/leftMotorSpeed")
+    def leftMotorSpeed(self) -> float:
+        return self._leftMotorSpeed
+
+    @autolog_output(key="Outputs/rightSpeed")
+    def rightMotorSpeed(self) -> float:
+        return self._rightMotorSpeed
+
     @autolog_output(key="Inputs/leftDriveDistanceInches")
     def leftDriveDistanceInches(self) -> float:
-        return -self.leftEncoder.getDistance()
+        return self._leftDriveDistanceInches
 
     @autolog_output(key="Inputs/rightDriveDistanceInches")
     def rightDriveDistanceInches(self) -> float:
-        return -self.rightEncoder.getDistance()
+        return self._rightDriveDistanceInches
 
     @autolog_output(key="Inputs/gyroYawPositionDeg")
     def yawPositionDeg(self) -> float:
