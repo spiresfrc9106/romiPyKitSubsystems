@@ -49,6 +49,13 @@ class RobotContainer:
         self.testSendableChooser
         are each able to maintain independent lists of options.
         
+        To run this code:
+        clone this repo
+        checkout this commit
+        uv sync
+        uv run -- robotpy sync
+        uv run -- robotpy sim
+        
         -Mike Stitt 2026-01-28
         
         """
