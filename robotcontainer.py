@@ -5,7 +5,7 @@ from commands2.sysid import SysIdRoutine
 from commands2.button import CommandXboxController
 from pykit.networktables.loggeddashboardchooser import LoggedDashboardChooser
 from pathplannerlib.auto import AutoBuilder, NamedCommands
-from wpilib import getDeployDirectory, XboxController
+from wpilib import getDeployDirectory, XboxController, SendableChooser, SmartDashboard
 
 from commands.drivecommands import DriveCommands
 from subsystems.drive.drive import Drive
@@ -36,24 +36,51 @@ class RobotContainer:
         auto_folder_path = os.path.join(getDeployDirectory(), "pathplanner", "autos")
         auto_list = os.listdir(auto_folder_path)
 
-        self.autoAndTestChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(
-            "Auto and Test Choices"
+
+        """
+        For debugging purposes, this code makes 4 choosers
+        - self.autoChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(...
+        - self.autoSendableChooser = SendableChooser()
+        - self.testChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(...
+        - self.testSendableChooser = SendableChooser()
+        
+        When running the code it seems, like a bug. The menu items for self.autoChooser are
+        placed in the self.testChooser. But the self.autoSendableChooser and 
+        self.testSendableChooser
+        are each able to maintain independent lists of options.
+        
+        -Mike Stitt 2026-01-28
+        
+        """
+        self.autoChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(
+            "Auto Choices"
         )
         for auto in auto_list:
             auto = auto.removesuffix(".auto")
-            self.autoAndTestChooser.addOption(
+            self.autoChooser.addOption(
                 auto,
                 AutoBuilder.buildAuto(auto),
             )
-        self.autoAndTestChooser.setDefaultOption("Do Nothing", cmd.none())
+        self.autoChooser.setDefaultOption("Auto Do Nothing", cmd.none())
+
+        self.autoSendableChooser = SendableChooser()
+        self.autoSendableChooser.addOption("Option 1 - Sendable Auto Choices", cmd.none())
+        self.autoSendableChooser.setDefaultOption("Sendable Auto Do Nothing", cmd.none())
+
+        SmartDashboard.putData("Sendable Auto Choices", self.autoSendableChooser)
 
         self.controller = XboxController(0)
+
+
+        self.testChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(
+            "Test Choices"
+        )
 
         ffWaitCmd = cmd.waitUntil(lambda: self.controller.getRightBumper())
         ffCmd = DriveCommands.feedForwardCharacterization(self.drive)
         ffWithWaits = ffWaitCmd.andThen(ffCmd.onlyWhile(lambda: self.controller.getRightBumper()))
 
-        self.autoAndTestChooser.addOption(
+        self.testChooser.addOption(
             "Test - Drive Simple FF Characterization",
             ffWithWaits
         )
@@ -62,7 +89,7 @@ class RobotContainer:
         sysIdQFCmd = self.drive.sysIdQuasistatic(SysIdRoutine.Direction.kForward)
         sysIdQFWithWaits = sysIdQFWaitCmd.andThen(sysIdQFCmd.onlyWhile(lambda: self.controller.getRightBumper()))
 
-        self.autoAndTestChooser.addOption(
+        self.testChooser.addOption(
             "Test - Drive SysId (Quasistatic Forward)",
             sysIdQFWithWaits
         )
@@ -71,7 +98,7 @@ class RobotContainer:
         sysIdQRCmd = self.drive.sysIdQuasistatic(SysIdRoutine.Direction.kReverse)
         sysIdQRWithWaits = sysIdQRWaitCmd.andThen(sysIdQRCmd.onlyWhile(lambda: self.controller.getRightBumper()))
 
-        self.autoAndTestChooser.addOption(
+        self.testChooser.addOption(
             "Test - Drive SysId (Quasistatic Reverse)",
             sysIdQRWithWaits
         )
@@ -80,7 +107,7 @@ class RobotContainer:
         sysIdDFCmd = self.drive.sysIdDynamic(SysIdRoutine.Direction.kForward)
         sysIdDFWithWaits = sysIdDFWaitCmd.andThen(sysIdDFCmd.onlyWhile(lambda: self.controller.getRightBumper()))
 
-        self.autoAndTestChooser.addOption(
+        self.testChooser.addOption(
             "Test - Drive SysId (Dynamic Forward)",
             sysIdDFWithWaits
         )
@@ -90,10 +117,19 @@ class RobotContainer:
         sysIdDRWithWaits = sysIdDRWaitCmd.andThen(sysIdDRCmd.onlyWhile(lambda: self.controller.getRightBumper()))
 
 
-        self.autoAndTestChooser.addOption(
+        self.testChooser.addOption(
             "Test - Drive SysId (Dynamic Reverse)",
             sysIdDRWithWaits
         )
+
+        self.testChooser.setDefaultOption("Test Do Nothing", cmd.none())
+
+        self.testSendableChooser = SendableChooser()
+        self.testSendableChooser.addOption("Option 1 - Sendable Test Choices", cmd.none())
+        self.testSendableChooser.setDefaultOption("Sendable Test Do Nothing", cmd.none())
+
+        SmartDashboard.putData("Sendable Test Choices", self.testSendableChooser)
+
 
         self.configureButtonBindingsNone()
 
@@ -129,4 +165,8 @@ class RobotContainer:
 
 
     def getAutonomousCommand(self) -> Optional[Command]:
-        return self.autoAndTestChooser.getSelected()
+        return self.autoChooser.getSelected()
+
+    def getTestCommand(self) -> Optional[Command]:
+        return self.testChooser.getSelected()
+
