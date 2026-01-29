@@ -28,6 +28,10 @@ Then look at the simulation window(s) for:
   - "Sendable Auto Choices"
   - "Sendable Test Choices"
 
-An example of the bug:
+When developing the code for this bug report, the "Auto Choices" SmartDashboard menu item
+existed in the simulation window once and remained an option.  But when starting with
+an empty repo, the "Auto Choices" menu item does not appear.
+
+An example of the bug with "Auto Choice" menu item appearing:
 
 ![screenshop-of-bug.png](screenshot-of-bug.png)
