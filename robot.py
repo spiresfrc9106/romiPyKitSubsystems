@@ -1,48 +1,8 @@
 #!/usr/bin/env python3
-#
-# Copyright (c) FIRST and other WPILib contributors.
-# Open Source Software; you can modify and/or share it under the terms of
-# the WPILib BSD license file in the root directory of this project.
-#
 
-#
-# Example that shows how to connect to a ROMI from RobotPy
-#
-# Requirements
-# ------------
-#
-#    # Install https://github.com/wpilibsuite/WPILibPi/releases/download/v2023.2.1/WPILibPi_64_image-v2023.2.1-Romi.zip
-#    # on your Raspberry Pi sd card.
-#
-#    # On Windows, some people prefer to run python 3
-#    py -3
-#
-#    # but sometimes when using Python virtual environments (venv) "py -3" does not run the python associated with
-#    # the virtual environment, some people (this author) avoids "py -3", preferring "python"
-#
-#    # confirm that your python is 3.12 or greater
-#    python -VV
-#
-#    python -m pip install robotpy
-#    python -m pip install robotpy-halsim-ws
-#
-#
-# Run the program
-# ---------------
-#
-# To run the program you will need to explicitly use the ws-client option:
-#
-#    cd to this directory
-#    python -m robotpy sync
-#
-#    power-up the Romi
-#    connect to a WiFi network where the romi is on.
-#
-#    python -m robotpy sim --ws-client
-#
-# By default the WPILib simulation GUI will be displayed. To disable the display
-# you can add the --nogui option
-#
+from pykit.networktables.loggeddashboardchooser import LoggedDashboardChooser
+
+
 
 import os
 from typing import Optional
@@ -51,6 +11,7 @@ from wpilib.deployinfo import getDeployData
 from pykit.wpilog.wpilogwriter import WPILOGWriter
 from pykit.wpilog.wpilogreader import WPILOGReader
 from pykit.networktables.nt4Publisher import NT4Publisher
+from pykit.networktables.loggeddashboardchooser import LoggedDashboardChooser
 from pykit.loggedrobot import LoggedRobot
 from pykit.logger import Logger
 
@@ -58,16 +19,8 @@ from commands2 import cmd, CommandScheduler, Command, PrintCommand
 
 import constants
 
-from wpilib import RobotBase
-from robotcontainer import RobotContainer
+from wpilib import RobotBase, SendableChooser, SmartDashboard
 
-
-
-# Uncomment these lines and set the port to the pycharm debugger to use the
-# Pycharm debug server to debug this code.
-
-#import pydevd_pycharm
-#pydevd_pycharm.settrace('localhost', port=61890, stdoutToServer=True, stderrToServer=True)
 
 # If your ROMI isn't at the default address, set that here
 os.environ["HALSIMWS_HOST"] = "10.0.0.2"
@@ -79,8 +32,7 @@ os.environ["HALSIMWS_PORT"] = "3300"
 class MyRobot(LoggedRobot):
 
     activeCommand: Optional[Command] = None
-    # kCountsPerRevolution = 1440.0
-    # kWheelDiameterInch = 2.75591
+
 
     def __init__(self) -> None:
         super().__init__()
@@ -123,48 +75,83 @@ class MyRobot(LoggedRobot):
                 Logger.addDataReciever(WPILOGWriter(log_path[:-7] + "_sim.wpilog"))
                 Logger.addDataReciever(NT4Publisher(True))  # Mike Stitt added this
 
+        """
+        For debugging purposes, this code makes 4 choosers
+        - self.autoChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(...
+        - self.autoSendableChooser = SendableChooser()
+        - self.testChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(...
+        - self.testSendableChooser = SendableChooser()
+
+        When running the code it seems, like a bug. The menu items for self.autoChooser are
+        placed in the self.testChooser. But the self.autoSendableChooser and 
+        self.testSendableChooser
+        are each able to maintain independent lists of options.
+
+        To run this code:
+        clone this repo
+        checkout this commit
+        uv sync
+        uv run -- robotpy sync
+        uv run -- robotpy sim
+
+        -Mike Stitt 2026-01-28
+
+        """
+        self.autoChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(
+            "Auto Choices"
+        )
+
+        self.autoChooser.addOption("Auto Option 1", cmd.none())
+        self.autoChooser.addOption("Auto Option 2", cmd.none())
+        self.autoChooser.setDefaultOption("Auto Do Nothing", cmd.none())
+
+        self.autoSendableChooser = SendableChooser()
+        self.autoSendableChooser.addOption("Option 1 - Sendable Auto Choices", cmd.none())
+        self.autoSendableChooser.setDefaultOption("Sendable Auto Do Nothing", cmd.none())
+
+        SmartDashboard.putData("Sendable Auto Choices", self.autoSendableChooser)
+
+        self.testChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(
+            "Test Choices"
+        )
+
+        self.testChooser.addOption(
+            "Test - Option 1",
+            cmd.none()
+        )
+
+        self.testChooser.addOption(
+            "Test - Option 2",
+            cmd.none()
+        )
+
+        self.testChooser.setDefaultOption("Test Do Nothing", cmd.none())
+
+        self.testSendableChooser = SendableChooser()
+        self.testSendableChooser.addOption("Option 1 - Sendable Test Choices", cmd.none())
+        self.testSendableChooser.setDefaultOption("Sendable Test Do Nothing", cmd.none())
+
+        SmartDashboard.putData("Sendable Test Choices", self.testSendableChooser)
+
         Logger.start()
 
-        self.robotContainer = RobotContainer()
 
     def robotInit(self) -> None:
-
-        """
-        This function is run when the robot is first started up and should be used for any
-        initialization code.
-        """
         pass
 
-
-
-
     def robotPeriodic(self) -> None:
-        """This function is called every 20 ms, no matter the mode. Use this for items like diagnostics
-        that you want ran during disabled, autonomous, teleoperated and test.
-
-        This runs after the mode specific periodic functions, but before LiveWindow and
-        SmartDashboard integrated updating."""
-
-        # Runs the Scheduler. This is responsible for polling buttons, adding
-        # newly-scheduled commands, running already-scheduled commands, removing
-        # finished or interrupted commands, and running subsystem periodic() methods.
-        # This must be called from the robot's periodic block in order for anything in
-        # the Command-based framework to work.
         CommandScheduler.getInstance().run()
 
     def disabledInit(self) -> None:
-        """This function is called once each time the robot enters Disabled mode."""
         pass
 
     def disabledPeriodic(self) -> None:
-        """This function is called periodically when disabled"""
         pass
 
     def autonomousInit(self) -> None:
-        """This autonomous runs the autonomous command selected by your RobotContainer class."""
         CommandScheduler.getInstance().cancelAll()
 
-        self.activeCommand = self.robotContainer.getAutonomousCommand()
+        self.activeCommand = self.autoChooser.getSelected()
 
         if self.activeCommand is not None:
             CommandScheduler.getInstance().schedule(self.activeCommand)
@@ -187,7 +174,6 @@ class MyRobot(LoggedRobot):
         # this line or comment it out.
         CommandScheduler.getInstance().cancelAll()
         self.activeCommand = None
-        self.robotContainer.configureButtonBindingsOpenLoop()
 
     def teleopPeriodic(self) -> None:
         """This function is called periodically during operator control"""
@@ -196,7 +182,7 @@ class MyRobot(LoggedRobot):
     def testInit(self) -> None:
         CommandScheduler.getInstance().cancelAll()
 
-        self.activeCommand = self.robotContainer.getTestCommand()
+        self.activeCommand = self.testChooser.getSelected()
 
         if self.activeCommand is not None:
             CommandScheduler.getInstance().schedule(self.activeCommand)
