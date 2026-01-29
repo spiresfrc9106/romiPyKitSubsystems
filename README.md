@@ -6,7 +6,7 @@ For debugging purposes, this code makes 4 choosers
 - `self.testChooser: LoggedDashboardChooser[Command] = LoggedDashboardChooser(...`
 - `self.testSendableChooser = SendableChooser()`
 
-When running the code it seems, like a bug. The menu items for self.autoChooser are
+When running the code it seems like a bug. The menu items for self.autoChooser are
 placed in the self.testChooser. But the self.autoSendableChooser and 
 self.testSendableChooser
 are each able to maintain independent lists of options.
