@@ -32,15 +32,15 @@ match driveBaseVersion:
         kRightInverted = True
         kGearbox = DCMotor.CIM(2)
 
-        """
-        kS = 0.602939807256675
-        kV = 0.12197011697695527
-        """
         kRealKp = 0.125   #  kP = volts / (rad/s)
         kRealKd = 0.0   #  kD = volts * s / (rad/s) = volts * s^2 / rad
                         #  kI = volts / rad
-        kRealKs = 0.551 #  kS = feed forward static friction = volts
-        kRealKv = 0.351*0.833 #  kV = feed forward velocity friction = volts / (rad/s)
+        # kRealKs = 0.551 #  kS = feed forward static friction = volts
+        # kRealKv = 0.351*0.833 #  kV = feed forward velocity friction = volts / (rad/s)
+
+        kRealKs = 0.256 #  kS = feed forward static friction = volts
+        kRealKv = 0.344 #  kV = feed forward velocity friction = volts / (rad/s)
+        kRealKa = 0.0449 # kA
 
         kSimKp = 0.0
         kSimKd = 0.0

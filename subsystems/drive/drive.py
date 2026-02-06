@@ -31,6 +31,8 @@ from util.sysidlog import sysIdStateToStr
 @autologgable_output
 class Drive(Subsystem):
     def __init__(self, io: DriveIO, gyroIO: GyroIO) -> None:
+        self.leftOldRadPerS = 0
+        self.rightOldRadPerS = 0
         self.io = io
         self.gyroIO = gyroIO
 
@@ -48,6 +50,11 @@ class Drive(Subsystem):
             driveconstants.kSimKv
             if constants.kRobotMode == constants.RobotModes.SIMULATION
             else driveconstants.kRealKv
+        )
+        self.kA = (
+            driveconstants.kSimKa
+            if constants.kRobotMode == constants.RobotModes.SIMULATION
+            else driveconstants.kRealKa
         )
 
         self.poseEstimator = DifferentialDrivePoseEstimator(
@@ -125,6 +132,8 @@ class Drive(Subsystem):
     def runClosedLoopParameters(self, leftSpeedMPS: float, rightSpeedMPS: float):
         leftRadPerS = leftSpeedMPS / driveconstants.kWheelRadiusM
         rightRadPerS = rightSpeedMPS / driveconstants.kWheelRadiusM
+        leftAccRadPerS2 = (leftRadPerS - self.leftOldRadPerS) / 0.02
+        rightAccRadPerS2 = (rightRadPerS - self.rightOldRadPerS) / 0.02
 
         Logger.recordOutput("Drive/leftSetpointMPS", leftSpeedMPS)
         Logger.recordOutput("Drive/rightSetpointMPS", leftSpeedMPS)
@@ -132,13 +141,16 @@ class Drive(Subsystem):
         Logger.recordOutput("Drive/leftSetpointRPS", leftRadPerS)
         Logger.recordOutput("Drive/rightSetpointRPS", rightRadPerS)
 
-        leftFF = self.kS * sign(leftRadPerS) + self.kV * leftRadPerS
-        rightFF = self.kS * sign(rightRadPerS) + self.kV * rightRadPerS
+        leftFF = self.kS * sign(leftRadPerS) + self.kV * leftRadPerS + self.kA * leftAccRadPerS2
+        rightFF = self.kS * sign(rightRadPerS) + self.kV * rightRadPerS + self.kA * rightAccRadPerS2
 
         Logger.recordOutput("Drive/leftFFVolts", leftFF)
         Logger.recordOutput("Drive/rightFFVolts", rightFF)
 
         self.io.setVelocity(self.inputs, leftRadPerS, rightRadPerS, leftFF, rightFF)
+
+        self.leftOldRadPerS = leftRadPerS
+        self.rightOldRadPerS = rightRadPerS
 
     def runOpenLoop(self, leftV: float, rightV: float) -> None:
         self.io.setVoltage(leftV, rightV)
