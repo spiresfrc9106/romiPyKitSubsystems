@@ -85,6 +85,8 @@ class DriveIORomiSpark(DriveIO):
 
         Logger.recordOutput("Drive/leftPIDVolts", leftPIDVolts)
         Logger.recordOutput("Drive/rightPIDVolts", rightPIDVolts)
+        Logger.recordOutput("Drive/leftRadPerSecCmd", leftRadPerSec)
+        Logger.recordOutput("Drive/rightRadPerSecCmd", rightRadPerSec)
 
         if self.debugController is not None and self.debugController.getAButton() and not self.debugController.getBButton():
             leftV = leftPIDVolts
