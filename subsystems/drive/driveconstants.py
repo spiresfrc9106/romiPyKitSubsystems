@@ -40,12 +40,13 @@ match driveBaseVersion:
 
         kRealKs = 0.256 #  kS = feed forward static friction = volts
         kRealKv = 0.344 #  kV = feed forward velocity friction = volts / (rad/s)
-        kRealKa = 0.0449 # kA
+        kRealKa = 0.0449 # kA = feed forward acceleration friction
 
         kSimKp = 0.0
         kSimKd = 0.0
         kSimKs = 0.0
         kSimKv = 0.227
+        kSimKa = 0.0
 
         kRobotMassKg = 74.088
         kRobotMOI = 6.883
